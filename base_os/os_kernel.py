@@ -1,16 +1,16 @@
+import datetime
+import json
+import os
+import shutil
 import subprocess
 import time
-import os
-import json
-import shutil
-import datetime
 
 
 class BaseOSKernel:
     def __init__(self):
         base_dir = os.path.dirname(os.path.abspath(__file__))
         project_root = os.path.dirname(base_dir)
-        self.active_dir = os.path.join(project_root, "evo_agent_active.py")
+        self.active_dir = os.path.join(project_root, "evo_agent_active")
         self.staging_dir = os.path.join(project_root, "staging_area")
         self.history_dir = os.path.join(project_root, "history_versions")
         self.entry_point = "main.py"
@@ -44,11 +44,15 @@ class BaseOSKernel:
         now = time.time()
         self.crash_log.append(now)
 
-        self.crash_log = [t for t in self.crash_log if now - t <= self.CRASH_WINDOW_SECONDS]
+        self.crash_log = [
+            t for t in self.crash_log if now - t <= self.CRASH_WINDOW_SECONDS
+        ]
 
         crash_count = len(self.crash_log)
         window_min = int(self.CRASH_WINDOW_SECONDS / 60)
-        print(f"[Base-OS] 最近 {window_min} 分钟内崩溃 {crash_count} 次 (上限 {self.MAX_CRASHES})")
+        print(
+            f"[Base-OS] 最近 {window_min} 分钟内崩溃 {crash_count} 次 (上限 {self.MAX_CRASHES})"
+        )
 
         if crash_count >= self.MAX_CRASHES:
             self.perform_rollback(exit_code)

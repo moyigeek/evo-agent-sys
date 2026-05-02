@@ -12,7 +12,7 @@ The Evo Agent cannot directly overwrite its own source code while running. Every
 evo-agent-sys/
 ├── base_os/                       # Immutable watchdog layer
 │   └── os_kernel.py               # Exit code supervisor, handles upgrades & rollbacks
-├── evo_agent_active.py/           # Mutable agent codebase (can be rewritten)
+├── evo_agent_active/           # Mutable agent codebase (can be rewritten)
 │   ├── main.py                    # Entry point + evolution protocol + ReAct loop
 │   ├── memory.py                  # State persistence (JSON)
 │   ├── reasoning.py               # ReAct reasoning framework
@@ -33,7 +33,7 @@ evo-agent-sys/
 | Layer | Path | Mutable? | Role |
 |-------|------|----------|------|
 | **Base-OS** | `base_os/os_kernel.py` | No | Spawns agent as subprocess, monitors exit codes, handles upgrades and crash recovery |
-| **Evo Agent** | `evo_agent_active.py/` | Yes | The self-modifying agent itself — code that can be rewritten by the LLM |
+| **Evo Agent** | `evo_agent_active/` | Yes | The self-modifying agent itself — code that can be rewritten by the LLM |
 
 Base-OS is the only piece that must never be modified. It acts as the immutable safety net.
 
@@ -51,7 +51,7 @@ Evo Agent                    Base-OS                  Filesystem
   │                             │                         │
   │── exit(42) ────────────────→│                         │
   │                             │ 5. Backup current code  │  history_versions/v{version}/
-  │                             │ 6. Deploy staged code   │  evo_agent_active.py/
+  │                             │ 6. Deploy staged code   │  evo_agent_active/
   │                             │ 7. Restart agent        │
   │←────────────────────────────│                         │
   │ 8. load_state()             │                         │
@@ -74,7 +74,7 @@ Evo Agent                    Base-OS                  Filesystem
 python base_os/os_kernel.py
 
 # ReAct mode with LLM
-python evo_agent_active.py/main.py \
+python evo_agent_active/main.py \
     --llm-url https://api.deepseek.com \
     --llm-key sk-your-api-key \
     --llm-model deepseek-chat
@@ -133,7 +133,7 @@ On startup, `EvoAgent.__init__()` calls `load_state()` to restore all context. T
 Base-OS maintains a timestamped crash log. If the agent crashes **≥3 times within 10 minutes**:
 
 1. Base-OS identifies the latest backup in `history_versions/`
-2. **Overwrites** `evo_agent_active.py/` with the backed-up code
+2. **Overwrites** `evo_agent_active/` with the backed-up code
 3. Injects a recovery message into `.evo_recovery_message.json`:
    > *"Your last code caused a fatal crash (exit code X). The system has been rolled back from version Y. Analyze and fix the issue before attempting another upgrade."*
 4. On next startup, `EvoAgent.__init__()` detects the recovery message, injects it into conversation history, and deletes the file
