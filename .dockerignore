@@ -1,0 +1,11 @@
+__pycache__
+*.pyc
+.venv
+.git
+.evo_state.json
+.evo_recovery_message.json
+staging_area
+history_versions
+test_*.py
+Dockerfile
+.dockerignore
