@@ -1,18 +1,23 @@
 import argparse
 import json
-import sys
 import os
 import shutil
 import subprocess
-import time
-from memory import ConversationMemory, save_state, load_state, load_recovery_message
+import sys
+
 from llm import LLMClient
-from system_prompt import SYSTEM_PROMPT
+from memory import load_recovery_message, load_state, save_state
 from reasoning import ReActLoop
+from system_prompt import SYSTEM_PROMPT
 
 
 class EvoAgent:
-    def __init__(self, llm_url: str | None = None, llm_key: str | None = None, llm_model: str | None = None):
+    def __init__(
+        self,
+        llm_url: str | None = None,
+        llm_key: str | None = None,
+        llm_model: str | None = None,
+    ):
         self.script_dir = os.path.dirname(os.path.abspath(__file__))
         self.project_root = os.path.dirname(self.script_dir)
 
@@ -58,7 +63,9 @@ class EvoAgent:
         print("[Evo Agent] 正在保存状态...")
         save_state(self.memory, {"upgrade_target": target_file})
 
-        print("[Evo Agent] 测试通过！正在发送 Exit Code 42 请求 Base-OS 重启并应用新核心...")
+        print(
+            "[Evo Agent] 测试通过！正在发送 Exit Code 42 请求 Base-OS 重启并应用新核心..."
+        )
         sys.exit(42)
 
     def run_self_test(self, staging_dir: str) -> bool:
@@ -75,10 +82,13 @@ class EvoAgent:
             try:
                 result = subprocess.run(
                     ["python", "-m", "py_compile", file_path],
-                    capture_output=True, timeout=15
+                    capture_output=True,
+                    timeout=15,
                 )
                 if result.returncode != 0:
-                    print(f"[Evo Agent] 语法错误 in {f}: {result.stderr.decode()[:500]}")
+                    print(
+                        f"[Evo Agent] 语法错误 in {f}: {result.stderr.decode()[:500]}"
+                    )
                     return False
             except subprocess.TimeoutExpired:
                 print(f"[Evo Agent] 语法检查超时: {f}")
@@ -143,7 +153,9 @@ class EvoAgent:
         llm_available = bool(self.llm.api_key)
 
         if not llm_available:
-            print("[Evo Agent] 注意: 未配置 LLM API Key (EVO_LLM_API_KEY)，运行在 echo 模式")
+            print(
+                "[Evo Agent] 注意: 未配置 LLM API Key (EVO_LLM_API_KEY)，运行在 echo 模式"
+            )
             self._run_echo_mode()
         else:
             self._run_react_mode()
@@ -194,14 +206,30 @@ class EvoAgent:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Evo Agent - Recursive Self-Improvement System")
-    parser.add_argument("--llm-url", dest="llm_url", default=None,
-                        help="LLM API base URL (overrides EVO_LLM_API_BASE)")
-    parser.add_argument("--llm-key", dest="llm_key", default=None,
-                        help="LLM API key (overrides EVO_LLM_API_KEY)")
-    parser.add_argument("--llm-model", dest="llm_model", default=None,
-                        help="LLM model name (overrides EVO_LLM_MODEL)")
+    parser = argparse.ArgumentParser(
+        description="Evo Agent - Recursive Self-Improvement System"
+    )
+    parser.add_argument(
+        "--llm-url",
+        dest="llm_url",
+        default=None,
+        help="LLM API base URL (overrides EVO_LLM_API_BASE)",
+    )
+    parser.add_argument(
+        "--llm-key",
+        dest="llm_key",
+        default=None,
+        help="LLM API key (overrides EVO_LLM_API_KEY)",
+    )
+    parser.add_argument(
+        "--llm-model",
+        dest="llm_model",
+        default=None,
+        help="LLM model name (overrides EVO_LLM_MODEL)",
+    )
     args = parser.parse_args()
 
-    agent = EvoAgent(llm_url=args.llm_url, llm_key=args.llm_key, llm_model=args.llm_model)
+    agent = EvoAgent(
+        llm_url=args.llm_url, llm_key=args.llm_key, llm_model=args.llm_model
+    )
     agent.run()
