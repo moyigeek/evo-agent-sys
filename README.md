@@ -1,131 +1,213 @@
 # Evo Agent System
 
-递归自我改进（Recursive Self-Improvement, RSI）Agent 系统。
+A Recursive Self-Improvement (RSI) agent system.
 
-**核心理念：「克隆 → 测试 → 换脑 → 重启」**
+**Core principle: "Clone → Test → Swap → Restart"**
 
-Evo Agent 不能直接边运行边覆盖自己的主程序代码，必须遵循严格的进化协议。
+The Evo Agent cannot directly overwrite its own source code while running. Every self-modification must follow a strict evolution protocol enforced by a parent watchdog process (Base-OS).
 
-## 架构
+## Architecture
 
 ```
 evo-agent-sys/
-├── base_os/                       # （不可变）看门狗
-│   └── os_kernel.py               # 监听退出码，执行换脑/回滚
-├── evo_agent_active.py/           # （可变）Evo Agent 代码本体
-│   ├── main.py                    # 入口 + 进化协议 + ReAct 循环
-│   ├── memory.py                  # 状态持久化（JSON）
-│   ├── reasoning.py               # ReAct 推理框架
-│   ├── system_prompt.py           # 系统提示词（架构护栏）
-│   ├── llm.py                     # LLM 客户端（零外部依赖）
+├── base_os/                       # Immutable watchdog layer
+│   └── os_kernel.py               # Exit code supervisor, handles upgrades & rollbacks
+├── evo_agent_active.py/           # Mutable agent codebase (can be rewritten)
+│   ├── main.py                    # Entry point + evolution protocol + ReAct loop
+│   ├── memory.py                  # State persistence (JSON)
+│   ├── reasoning.py               # ReAct reasoning framework
+│   ├── system_prompt.py           # Architectural guardrails injected as system prompt
+│   ├── llm.py                     # LLM client (zero external dependencies)
 │   └── skills/
-│       └── __init__.py            # 工具注册中心
-├── staging_area/                  # 暂存区（运行时生成）
-├── history_versions/              # 版本快照（运行时生成）
-├── .evo_state.json                # 状态持久化文件
-└── .evo_recovery_message.json     # 回滚恢复消息（Base-OS 写入）
+│       └── __init__.py            # Tool registry with built-in skills
+├── staging_area/                  # Draft area for new code (generated at runtime)
+├── history_versions/              # Version snapshots for rollback (generated at runtime)
+├── .evo_state.json                # Persisted agent state
+├── .evo_recovery_message.json     # Rollback recovery message (written by Base-OS)
+├── Dockerfile
+└── .dockerignore
 ```
 
-## 进化协议
+### Dual-Layer Design
+
+| Layer | Path | Mutable? | Role |
+|-------|------|----------|------|
+| **Base-OS** | `base_os/os_kernel.py` | No | Spawns agent as subprocess, monitors exit codes, handles upgrades and crash recovery |
+| **Evo Agent** | `evo_agent_active.py/` | Yes | The self-modifying agent itself — code that can be rewritten by the LLM |
+
+Base-OS is the only piece that must never be modified. It acts as the immutable safety net.
+
+## Evolution Protocol
+
+Every self-modification follows this 8-step protocol:
 
 ```
-Evo Agent         Base-OS          文件系统
-  │                  │                │
-  │  1.暂存新代码   │                │  staging_area/
-  │  2.语法检查     │                │
-  │  3.隔离进程测试 │                │
-  │  4.保存状态     │                │  .evo_state.json
-  │                  │                │
-  │──exit(42)──────→│                │
-  │                  │  5.备份旧代码  │  history_versions/v{version}/
-  │                  │  6.部署新代码  │  evo_agent_active.py/
-  │                  │  7.重启 Agent  │
-  │←─────────────────│                │
-  │  8.load_state()  │                │
+Evo Agent                    Base-OS                  Filesystem
+  │                             │                         │
+  │ 1. Clone code to staging   │                         │  staging_area/
+  │ 2. Syntax check (py_compile)│                         │
+  │ 3. Isolation process test  │                         │
+  │ 4. Save state              │                         │  .evo_state.json
+  │                             │                         │
+  │── exit(42) ────────────────→│                         │
+  │                             │ 5. Backup current code  │  history_versions/v{version}/
+  │                             │ 6. Deploy staged code   │  evo_agent_active.py/
+  │                             │ 7. Restart agent        │
+  │←────────────────────────────│                         │
+  │ 8. load_state()             │                         │
 ```
 
-| 退出码 | 含义 | Base-OS 行为 |
-|--------|------|-------------|
-| 0 | 正常关机 | 退出主循环 |
-| 42 | 升级请求 | 备份 → 替换 → 重启 |
-| 其他非零 | 崩溃 | 记录时间戳；10分钟内≥3次则回滚 |
+### Exit Codes
 
-## 快速开始
+| Exit Code | Meaning | Base-OS Action |
+|-----------|---------|----------------|
+| 0 | Normal shutdown | Break the supervision loop |
+| 42 | Upgrade request | Backup → swap staged code → restart |
+| Any other non-zero | Crash | Record timestamp; rollback if ≥3 crashes in 10 min |
+
+## Quick Start
+
+### Direct Execution
 
 ```bash
-# Echo 模式（无 LLM，仅回显输入）
+# Echo mode (no LLM, echoes input back)
 python base_os/os_kernel.py
 
-# ReAct 模式（配置 LLM）
-python evo_agent_active.py/main.py --llm-url https://api.deepseek.com \
-                                    --llm-key sk-your-key \
-                                    --llm-model deepseek-chat
+# ReAct mode with LLM
+python evo_agent_active.py/main.py \
+    --llm-url https://api.deepseek.com \
+    --llm-key sk-your-api-key \
+    --llm-model deepseek-chat
 ```
 
-### LLM 配置
+### Docker
 
-三种方式配置 LLM，优先级：**CLI 参数 > 环境变量 > 默认值**。
+```bash
+docker build -t evo-agent .
 
-| CLI 参数 | 环境变量 | 默认值 | 说明 |
-|---------|---------|--------|------|
-| `--llm-url` | `EVO_LLM_API_BASE` | `https://api.openai.com` | API 地址（兼容 OpenAI 接口） |
-| `--llm-key` | `EVO_LLM_API_KEY` | `""` | API Key（不设时进入 echo 模式） |
-| `--llm-model` | `EVO_LLM_MODEL` | `gpt-4o` | 模型名称 |
+# Echo mode
+docker run -it evo-agent
 
-未配置 API Key 时，Agent 运行在 echo 模式，仅回显输入内容。
+# ReAct mode
+docker run -it \
+    -e EVO_LLM_API_KEY=sk-your-key \
+    -e EVO_LLM_API_BASE=https://api.deepseek.com \
+    -e EVO_LLM_MODEL=deepseek-chat \
+    evo-agent
+```
 
-## 核心机制
+## LLM Configuration
 
-### 状态持久化
+Three configuration methods, in order of priority: **CLI arguments > environment variables > defaults**.
 
-重启前 Agent 将对话历史、长期记忆、当前任务序列化到 `.evo_state.json`。新版本启动时自动调用 `load_state()` 恢复，用户感知不到 Agent 重启过。
+| CLI Argument | Environment Variable | Default | Description |
+|-------------|---------------------|---------|-------------|
+| `--llm-url` | `EVO_LLM_API_BASE` | `https://api.openai.com` | API base URL (OpenAI-compatible) |
+| `--llm-key` | `EVO_LLM_API_KEY` | `""` | API key. When unset, agent runs in **echo mode** |
+| `--llm-model` | `EVO_LLM_MODEL` | `gpt-4o` | Model name |
 
-### 死亡螺旋防护
+The LLM client (`llm.py`) uses only `urllib` from the Python standard library — no third-party SDKs required. It is compatible with any OpenAI-format API (OpenAI, DeepSeek, vLLM, Ollama, etc.).
 
-Base-OS 记录每次崩溃的时间戳。若 **10 分钟内崩溃 ≥ 3 次**：
+Without an API key, the agent runs in echo mode, simply echoing back stdin input. This is useful for testing the agent lifecycle without an LLM.
 
-1. 从 `history_versions/` 拷贝最新备份覆盖当前代码
-2. 向 `.evo_recovery_message.json` 注入恢复消息
-3. Agent 启动时读取恢复消息，注入对话历史，分析并修复问题
+## Core Mechanisms
 
-### 自我测试
+### State Persistence
 
-升级前执行两级测试：
+Before `sys.exit(42)`, the agent serializes its entire state to `.evo_state.json`:
 
-1. **语法检查**：对所有 `.py` 文件运行 `py_compile`
-2. **隔离进程测试**：启动新代码的子进程，发送测试 prompt，校验响应和退出码，10 秒超时防死循环
+- **Conversation history** (user/assistant/system turns with timestamps)
+- **Long-term facts** (deduplicated knowledge store)
+- **Current task** (active long-running task)
+- **Extra metadata** (upgrade target file, etc.)
 
-### 必留接口
+On startup, `EvoAgent.__init__()` calls `load_state()` to restore all context. The user experiences no interruption across restarts.
 
-重写核心代码时必须保留以下接口，否则系统无法引导：
+| File | Purpose |
+|------|---------|
+| `.evo_state.json` | Agent state (written by agent) |
+| `.evo_recovery_message.json` | Crash recovery context (written by Base-OS) |
 
-| 接口 | 位置 | 说明 |
-|------|------|------|
-| `EvoAgent.__init__()` | main.py | 必须调用 `load_state()` |
-| `EvoAgent.run()` | main.py | 主循环入口 |
-| `evaluate_and_rewrite_core()` | main.py | 进化协议入口 |
-| `save_state()` / `load_state()` | memory.py | 状态序列化/反序列化 |
-| `load_recovery_message()` | memory.py | 检查回滚恢复消息 |
+### Death Spiral Protection
 
-### 工具库
+Base-OS maintains a timestamped crash log. If the agent crashes **≥3 times within 10 minutes**:
 
-`skills/__init__.py` 提供 `SkillRegistry` 和内置工具：
+1. Base-OS identifies the latest backup in `history_versions/`
+2. **Overwrites** `evo_agent_active.py/` with the backed-up code
+3. Injects a recovery message into `.evo_recovery_message.json`:
+   > *"Your last code caused a fatal crash (exit code X). The system has been rolled back from version Y. Analyze and fix the issue before attempting another upgrade."*
+4. On next startup, `EvoAgent.__init__()` detects the recovery message, injects it into conversation history, and deletes the file
 
-| 工具 | 功能 |
-|------|------|
-| `read_file` | 读取文件 |
-| `write_file` | 写入文件 |
-| `run_command` | 执行 shell 命令（30s 超时） |
+**Configurable thresholds** in `os_kernel.py`:
 
-## 运行测试
+| Constant | Default | Description |
+|----------|---------|-------------|
+| `CRASH_WINDOW_SECONDS` | `600` | Observation window (10 minutes) |
+| `MAX_CRASHES` | `3` | Crashes threshold within the window |
+
+### Self-Testing
+
+Before any upgrade is applied, two-stage testing runs in isolation:
+
+**Stage 1 — Syntax Check:**
+All `.py` files in the staging area are validated with `python -m py_compile`. Any syntax error rejects the upgrade.
+
+**Stage 2 — Isolation Process Test:**
+The staging `main.py` is launched as a subprocess. A test prompt (`{"action":"ping"}`) is sent to stdin. The test validates:
+- Process exits within 10 seconds (catches infinite loops)
+- Process returns exit code 0 or 42
+- stdout contains the expected marker `[Evo Agent]`
+
+Only when both stages pass does the agent proceed to `sys.exit(42)`.
+
+### ReAct Reasoning Loop
+
+`reasoning.py` implements the ReAct (Reason + Act) pattern:
+
+1. Append user input to conversation history
+2. Send full history to LLM
+3. Parse response for `Thought:` and `Action:` tags
+4. Execute the tool via `SkillRegistry` and collect observation
+5. Append observation to history, repeat (max 10 iterations)
+6. Return final answer when no `Action:` tag is present
+
+The `evaluate_and_rewrite_core` tool is pre-registered, allowing the LLM to trigger self-modification through the ReAct loop.
+
+### Mandatory Interfaces
+
+When the LLM rewrites core code, these interfaces **must be preserved**. Deleting any of them prevents the system from booting. This constraint is declared in the system prompt (`system_prompt.py`).
+
+| Interface | File | Requirement |
+|-----------|------|-------------|
+| `EvoAgent.__init__()` | main.py | Must call `load_state()` |
+| `EvoAgent.run()` | main.py | Main loop entry point |
+| `EvoAgent.evaluate_and_rewrite_core()` | main.py | Evolution protocol entry point |
+| `save_state()` | memory.py | State serialization |
+| `load_state()` | memory.py | State deserialization |
+| `load_recovery_message()` | memory.py | Check for rollback recovery message |
+
+## Built-in Skills
+
+| Skill | Signature | Description |
+|-------|-----------|-------------|
+| `read_file` | `read_file(path: str) -> str` | Read file contents |
+| `write_file` | `write_file({"path": ..., "content": ...}) -> str` | Write content to file (auto-creates parent dirs) |
+| `run_command` | `run_command(cmd: str) -> str` | Execute shell command with 30s timeout |
+
+Register additional skills via `SkillRegistry.register()`.
+
+## Running Tests
 
 ```bash
 python test_e2e.py
 ```
 
-## 安全警告
+Covers: state persistence, recovery message handling, syntax checks (pass/fail), isolation process test, crash counter, and staging area integrity.
 
-- 该 Agent 可**修改自身核心代码**，相当于在飞行中拆装引擎
-- System Prompt 中已声明架构约束和必留接口，但 LLM 可能不遵守
-- 死亡螺旋回滚机制提供最后防线，但不能保证万无一失
-- 生产环境建议在沙箱/容器中运行
+## Safety Warnings
+
+- This agent can **rewrite its own source code** — analogous to rebuilding an engine mid-flight
+- The system prompt declares architectural constraints and mandatory interfaces, but LLMs are not guaranteed to comply
+- The death spiral rollback mechanism provides a last-resort safety net, but it is not foolproof
+- Run in a sandbox or container in any environment where side effects matter
+- Base-OS (`base_os/os_kernel.py`) must never be modified — it is the only immutable component
