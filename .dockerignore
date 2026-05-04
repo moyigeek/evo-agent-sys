@@ -2,6 +2,7 @@ __pycache__
 *.pyc
 .venv
 .git
+.env
 .evo_state.json
 .evo_recovery_message.json
 staging_area
