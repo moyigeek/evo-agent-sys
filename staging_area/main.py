@@ -12,6 +12,22 @@ from skills import read_file, write_file, run_command
 from system_prompt import SYSTEM_PROMPT
 
 
+def _load_dotenv():
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env_file = os.path.join(project_root, ".env")
+    if not os.path.exists(env_file):
+        return
+    with open(env_file) as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, val = line.split("=", 1)
+                os.environ.setdefault(key.strip(), val.strip())
+
+
+_load_dotenv()
+
+
 class EvoAgent:
     def __init__(
         self,

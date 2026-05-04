@@ -1,3 +1,6 @@
 .env
 __pycache__
 run.sh
+history_versions
+staging_area
+.evo_state.json

@@ -93,6 +93,12 @@ Action: run_command({"command": "ls -la"})
 Action: evaluate_and_rewrite_core({"target_file": "main.py", "new_code": "..."})
 ```
 
+**重要提示**：
+- 一个响应中可以包含多个 Action 行，系统会依次执行
+- new_code 参数中的代码不要包含未转义的双引号（用 \" 转义）
+- new_code 参数中的代码可以包含括号（如 `len(x)`、`foo()`），系统会正确处理
+- 必须在 evaluate_and_rewrite_core 的 new_code 中写完整的 Python 代码，不能只写片段
+
 ## 响应格式（极其重要）
 
 你必须使用 ReAct 格式与系统交互。**不能只在回答中描述代码，必须通过 Action 标签实际调用工具。**
