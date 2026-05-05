@@ -11,8 +11,10 @@ The Evo Agent cannot directly overwrite its own source code while running. Every
 ```
 evo-agent-sys/
 ├── base_os/                       # Immutable watchdog layer
-│   └── os_kernel.py               # Exit code supervisor, handles upgrades & rollbacks
-├── evo_agent_active/           # Mutable agent codebase (can be rewritten)
+│   └── os_kernel.py               # Exit code supervisor + upgrade/rollback logic
+├── build_kernel.sh                # PyInstaller script → compiles Base-OS to binary
+├── kernel                         # Compiled Base-OS binary (built once, never modified)
+├── evo_agent_active/              # Mutable agent codebase (can be rewritten by LLM)
 │   ├── main.py                    # Entry point + evolution protocol + ReAct loop
 │   ├── memory.py                  # State persistence (JSON)
 │   ├── reasoning.py               # ReAct reasoning framework
@@ -20,6 +22,7 @@ evo-agent-sys/
 │   ├── llm.py                     # LLM client (zero external dependencies)
 │   └── skills/
 │       └── __init__.py            # Tool registry with built-in skills
+├── .env                           # LLM credentials (user-editable)
 ├── staging_area/                  # Draft area for new code (generated at runtime)
 ├── history_versions/              # Version snapshots for rollback (generated at runtime)
 ├── .evo_state.json                # Persisted agent state
@@ -32,10 +35,10 @@ evo-agent-sys/
 
 | Layer | Path | Mutable? | Role |
 |-------|------|----------|------|
-| **Base-OS** | `base_os/os_kernel.py` | No | Spawns agent as subprocess, monitors exit codes, handles upgrades and crash recovery |
+| **Base-OS** | `base_os/os_kernel.py` → compiled to `kernel` binary | No | Spawns agent as subprocess, monitors exit codes, handles upgrades and crash recovery |
 | **Evo Agent** | `evo_agent_active/` | Yes | The self-modifying agent itself — code that can be rewritten by the LLM |
 
-Base-OS is the only piece that must never be modified. It acts as the immutable safety net.
+**Immutable Kernel Binary:** Compile Base-OS once with `bash build_kernel.sh` to produce a standalone `./kernel` binary. The binary cannot be read or modified by text editors or the LLM, ensuring the watchdog layer remains tamper-proof.
 
 ## Evolution Protocol
 
@@ -67,28 +70,47 @@ Evo Agent                    Base-OS                  Filesystem
 
 ## Quick Start
 
-### Direct Execution
+### 1. Configure LLM
+
+Create `.env` at project root (or export environment variables):
 
 ```bash
-# Echo mode (no LLM, echoes input back)
+# .env
+EVO_LLM_API_BASE=https://api.deepseek.com
+EVO_LLM_API_KEY=sk-your-api-key
+EVO_LLM_MODEL=deepseek-chat
+```
+
+Without a key the agent runs in **echo mode** (echoes input back) — useful for testing lifecycle.
+
+### 2. Compile Base-OS Kernel (recommended)
+
+Compile the watchdog layer into an immutable binary:
+
+```bash
+bash build_kernel.sh     # requires pyinstaller (pip install pyinstaller)
+./kernel                 # start the system
+```
+
+The `kernel` binary is now a black box — no text editor or LLM can modify it.
+
+### 3. Run the System
+
+```bash
+# Recommended: compiled binary
+./kernel
+
+# Alternative: Python source (for development)
 python base_os/os_kernel.py
 
-# ReAct mode with LLM
-python evo_agent_active/main.py \
-    --llm-url https://api.deepseek.com \
-    --llm-key sk-your-api-key \
-    --llm-model deepseek-chat
+# Direct agent only (bypasses Base-OS watchdog)
+python evo_agent_active/main.py
 ```
 
 ### Docker
 
 ```bash
 docker build -t evo-agent .
-
-# Echo mode
-docker run -it evo-agent
-
-# ReAct mode
 docker run -it \
     -e EVO_LLM_API_KEY=sk-your-key \
     -e EVO_LLM_API_BASE=https://api.deepseek.com \
@@ -106,9 +128,9 @@ Three configuration methods, in order of priority: **CLI arguments > environment
 | `--llm-key` | `EVO_LLM_API_KEY` | `""` | API key. When unset, agent runs in **echo mode** |
 | `--llm-model` | `EVO_LLM_MODEL` | `gpt-4o` | Model name |
 
-The LLM client (`llm.py`) uses only `urllib` from the Python standard library — no third-party SDKs required. It is compatible with any OpenAI-format API (OpenAI, DeepSeek, vLLM, Ollama, etc.).
+**`.env` autoloading:** Both `os_kernel.py` and `main.py` automatically load `PROJECT_ROOT/.env` on startup using `os.environ.setdefault` (existing env vars take precedence). No external library required.
 
-Without an API key, the agent runs in echo mode, simply echoing back stdin input. This is useful for testing the agent lifecycle without an LLM.
+The LLM client (`llm.py`) uses only `urllib` from the Python standard library — no third-party SDKs required. Compatible with any OpenAI-format API (OpenAI, DeepSeek, vLLM, Ollama, etc.).
 
 ## Core Mechanisms
 
@@ -210,4 +232,5 @@ Covers: state persistence, recovery message handling, syntax checks (pass/fail),
 - The system prompt declares architectural constraints and mandatory interfaces, but LLMs are not guaranteed to comply
 - The death spiral rollback mechanism provides a last-resort safety net, but it is not foolproof
 - Run in a sandbox or container in any environment where side effects matter
-- Base-OS (`base_os/os_kernel.py`) must never be modified — it is the only immutable component
+- **Compile Base-OS to binary** (`bash build_kernel.sh`) to prevent the LLM from tampering with the watchdog layer
+- The `kernel` binary is write-protected by design: even if the agent goes rogue, the supervisor cannot be modified

@@ -3,12 +3,28 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import time
 
 
+def _get_project_root() -> str:
+    if getattr(sys, "frozen", False):
+        # PyInstaller --onefile: binary at project root
+        bin_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+        if os.path.basename(bin_dir) == "base_os":
+            return os.path.dirname(bin_dir)
+        return bin_dir
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    if os.path.basename(base_dir) == "base_os":
+        return os.path.dirname(base_dir)
+    return base_dir
+
+
+PROJECT_ROOT = _get_project_root()
+
+
 def _load_dotenv():
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    env_file = os.path.join(project_root, ".env")
+    env_file = os.path.join(PROJECT_ROOT, ".env")
     if not os.path.exists(env_file):
         return
     with open(env_file) as f:
@@ -19,16 +35,15 @@ def _load_dotenv():
                 os.environ.setdefault(key.strip(), val.strip())
 
 
+
 _load_dotenv()
 
 
 class BaseOSKernel:
     def __init__(self):
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        project_root = os.path.dirname(base_dir)
-        self.active_dir = os.path.join(project_root, "evo_agent_active")
-        self.staging_dir = os.path.join(project_root, "staging_area")
-        self.history_dir = os.path.join(project_root, "history_versions")
+        self.active_dir = os.path.join(PROJECT_ROOT, "evo_agent_active")
+        self.staging_dir = os.path.join(PROJECT_ROOT, "staging_area")
+        self.history_dir = os.path.join(PROJECT_ROOT, "history_versions")
         self.entry_point = "main.py"
         self.version = 1.0
         self.crash_log = []
@@ -107,8 +122,7 @@ class BaseOSKernel:
                 f"请分析并修复问题后再尝试升级。"
             )
         }
-        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        recovery_file = os.path.join(project_root, ".evo_recovery_message.json")
+        recovery_file = os.path.join(PROJECT_ROOT, ".evo_recovery_message.json")
         with open(recovery_file, "w", encoding="utf-8") as f:
             json.dump(recovery_msg, f, ensure_ascii=False, indent=2)
         print("[Base-OS] 已向代理注入恢复消息")
