@@ -2,6 +2,7 @@ __pycache__
 *.pyc
 .venv
 .git
+.github
 .env
 .evo_state.json
 .evo_recovery_message.json
@@ -10,3 +11,4 @@ history_versions
 test_*.py
 Dockerfile
 .dockerignore
+build_kernel.sh
