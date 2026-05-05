@@ -6,6 +6,7 @@ __pycache__
 .env
 .evo_state.json
 .evo_recovery_message.json
+base_os
 staging_area
 history_versions
 test_*.py

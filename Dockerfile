@@ -2,16 +2,11 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-COPY . .
+COPY evo_agent_active/ evo_agent_active/
+COPY kernel .
 
-RUN pip install pyinstaller -q && \
-    pyinstaller --onefile --name kernel base_os/os_kernel.py && \
-    mv dist/kernel . && \
-    pip uninstall pyinstaller -y -q && \
-    rm -rf build/ dist/ kernel.spec && \
+RUN mkdir -p staging_area history_versions && \
     chmod +x kernel && \
-    rm -rf base_os/ && \
-    mkdir -p staging_area history_versions && \
     chmod -R 755 .
 
 ENV PYTHONUNBUFFERED=1
