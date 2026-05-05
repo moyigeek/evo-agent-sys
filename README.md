@@ -118,6 +118,35 @@ docker run -it \
     evo-agent
 ```
 
+### GitHub Actions (Automated CI/CD)
+
+Push to `main` triggers automatic build and push to GitHub Container Registry:
+
+```
+push to main ──→ CI runner
+                   ├─ Compile Base-OS → ./kernel (PyInstaller)
+                   ├─ Docker build (COPY kernel binary)
+                   └─ Push to ghcr.io/moyigeek/evo-agent-sys:latest
+```
+
+**Workflow:** `.github/workflows/docker-build.yml`
+
+- **Triggers:** push to `main` / `master`, manual `workflow_dispatch`
+- **Tags:** `latest`, branch name, short commit SHA
+- **Cache:** GHA layer cache for fast rebuilds
+- Requires no secrets — uses built-in `GITHUB_TOKEN`
+
+Pull the pre-built image:
+
+```bash
+docker pull ghcr.io/moyigeek/evo-agent-sys:latest
+docker run -it \
+    -e EVO_LLM_API_KEY=sk-your-key \
+    -e EVO_LLM_API_BASE=https://api.deepseek.com \
+    -e EVO_LLM_MODEL=deepseek-chat \
+    ghcr.io/moyigeek/evo-agent-sys:latest
+```
+
 ## LLM Configuration
 
 Three configuration methods, in order of priority: **CLI arguments > environment variables > defaults**.
